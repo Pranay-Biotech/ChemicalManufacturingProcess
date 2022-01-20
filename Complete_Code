@@ -1,0 +1,236 @@
+#importing dataset
+install.packages("AppliedPredictiveModeling")
+library(AppliedPredictiveModeling)
+data("ChemicalManufacturingProcess")
+data<-ChemicalManufacturingProcess
+data<-as.data.frame(data)
+#View(data)
+
+#data understanding
+df <- data
+df_MD<-data.frame(colnames(df),paste(head(df),sep = ","),
+                  sapply(df, function(x) class(x)),
+                  colSums(is.na(df)),
+                  sapply(df, function(x) length(unique(x))),
+                  sapply(df, function(x) length(x))-sapply(df, function(x) length(unique(x))),
+                  sapply(df, function(x) length(x)),row.names = NULL)
+
+df_MD<-cbind(as.numeric(rownames(df_MD)),df_MD)
+names(df_MD)<-c("col_Number","Var_Name","Head","class","NA_Count","Uniques","Duplicates","Length")
+#View(df_MD)
+
+#data preprocessing
+
+#Replacing the NA values with the mean value of that particular column
+df_wo_NA<-data
+for(i in 1:ncol(df_wo_NA)) {                                   
+  df_wo_NA[ , i][is.na(df_wo_NA[ , i])] <- mean(df_wo_NA[ , i], na.rm = TRUE)
+}
+
+#removing undesirable columns
+#Columns like BiologicalMaterial07 has large duplicated values 
+#ManufacturingProcess21 has negative values
+df_wo_NA<-df_wo_NA[,-34]
+data_clean<-as.data.frame(df_wo_NA[!sapply(df_wo_NA, function(x) length(x))-sapply(df_wo_NA, function(x) length(unique(x)))>=88])
+
+
+
+# Reanlayzing the quality
+df <- data_clean
+df_MD<-data.frame(colnames(df),paste(head(df),sep = ","),
+                  sapply(df, function(x) class(x)),
+                  colSums(is.na(df)),
+                  sapply(df, function(x) length(unique(x))),
+                  sapply(df, function(x) length(x))-sapply(df, function(x) length(unique(x))),
+                  sapply(df, function(x) length(x)),row.names = NULL)
+
+df_MD<-cbind(as.numeric(rownames(df_MD)),df_MD)
+names(df_MD)<-c("col_Number","Var_Name","Head","class","NA_Count","Uniques","Duplicates","Length")
+View(df_MD)
+
+
+#Modeling with all columns as predictors for Yield
+#Splitting the dataset into the Training set and Test set
+
+install.packages('caTools')
+model_clean<-data_clean
+library(caTools)
+set.seed(123)
+split = sample.split(model_clean$Yield, SplitRatio = 0.8)
+training_set_clean = subset(model_clean, split == TRUE)
+test_set_clean = subset(model_clean, split == FALSE)
+
+#scaling
+training_set_clean = scale(training_set_clean)
+test_set_clean = scale(test_set_clean)
+
+# Fitting Simple Linear Regression to the Training set
+regressor = lm(formula = Yield ~ BiologicalMaterial05,
+               data = as.data.frame(training_set_clean))
+
+# Predicting the Test set results
+y_pred = predict(regressor, newdata = as.data.frame(test_set_clean))
+
+#model summary
+cor(y_pred,as.data.frame(test_set_clean)$Yield)
+summary(regressor)
+
+
+
+#Taking Data without removing columns with high duplicates
+#It is stored in df_wo_NA
+model_original <- df_wo_NA
+#install.packages('caTools')
+library(caTools)
+set.seed(123)
+split = sample.split(model_original$Yield, SplitRatio = 0.8)
+training_set_original = subset(model_original, split == TRUE)
+test_set_original = subset(model_original, split == FALSE)
+
+#scaling
+training_set_original = scale(training_set_original)
+test_set_original = scale(test_set_original)
+training_set_original<-as.data.frame(training_set_original)
+test_set_original<-as.data.frame(test_set_original)
+
+# Fitting Multiple Linear Regression to the Training set
+regressor = lm(formula = Yield ~ .,
+               data = training_set_original)
+plot(regressor)
+summary(regressor)
+
+pid::paretoPlot(regressor)
+
+y_pred = predict(regressor, newdata = test_set_original)
+cor(y_pred,test_set_original$Yield)
+
+#Feature Selection
+library(MASS)
+regressor_v2 <- MASS::stepAIC(regressor)
+View(regressor_v2)
+#?stepAIC
+#The lower the value for AIC, the better the fit of the model.
+#The absolute value of the AIC value is not important. It can be positive or negative.
+
+
+#Model obtained by AIC
+Yield ~ BiologicalMaterial02 + BiologicalMaterial06 + BiologicalMaterial07 + 
+  ManufacturingProcess03 + ManufacturingProcess04 + ManufacturingProcess05 + 
+  ManufacturingProcess09 + ManufacturingProcess12 + ManufacturingProcess13 + 
+  ManufacturingProcess15 + ManufacturingProcess25 + ManufacturingProcess28 + 
+  ManufacturingProcess29 + ManufacturingProcess32 + ManufacturingProcess33 + 
+  ManufacturingProcess37 + ManufacturingProcess38 + ManufacturingProcess45
+
+#Selecting columns present in the obtained model
+
+AIC_df<-as.data.frame(df_wo_NA[,c("Yield","BiologicalMaterial02","BiologicalMaterial06","BiologicalMaterial07", 
+                                  "ManufacturingProcess03","ManufacturingProcess04","ManufacturingProcess05", 
+                                  "ManufacturingProcess09","ManufacturingProcess12","ManufacturingProcess13", 
+                                  "ManufacturingProcess15", "ManufacturingProcess25","ManufacturingProcess28", 
+                                  "ManufacturingProcess29","ManufacturingProcess32", "ManufacturingProcess33", 
+                                  "ManufacturingProcess37","ManufacturingProcess38","ManufacturingProcess45")])
+
+library(caTools)
+set.seed(123)
+split = sample.split(AIC_df$Yield, SplitRatio = 0.8)
+training_set_AIC = subset(AIC_df, split == TRUE)
+test_set_AIC = subset(AIC_df, split == FALSE)
+# Fitting Multiple Linear Regression to the Training set of AIC
+regressor = lm(formula = Yield ~ .,
+               data = training_set_AIC)
+plot(regressor)
+summary(regressor)
+pid::paretoPlot(regressor)
+
+# Predicting the Test set results
+y_pred = predict(regressor, newdata = test_set_AIC)
+cor(y_pred,test_set_AIC$Yield)
+
+
+
+
+
+# Polynomial Regression 
+
+
+#Polynomial Regression For original dataset (without NA)
+df_wo_NA2<-df_wo_NA
+df_wo_NA2<-setNames(as.data.frame(cbind(df_wo_NA2,df_wo_NA2[,-1]^2)), c(names(df_wo_NA2),paste0(names(df_wo_NA2[-1]),'_2')))
+
+poly_reg = lm(formula = Yield ~ .,
+              data = training_set_poly)
+summary(poly_reg)
+
+
+
+#Polynomial Regression For dataset obtained after AIC feature selection
+AIC_df2<-AIC_df
+AIC_df2<-setNames(as.data.frame(cbind(AIC_df2,AIC_df2[,-1]^2)), c(names(AIC_df2),paste0(names(AIC_df2[-1]),'_2')))
+poly_reg = lm(formula = Yield ~ .,
+              data = AIC_df2)
+summary(poly_reg)
+
+
+
+
+#Support Vector Regression
+
+# Fitting SVR to the dataset
+# install.packages('e1071')
+library(e1071)
+regressor = svm(formula = Yield ~ .,
+                data = df_wo_NA,
+                type = 'eps-regression',
+                kernel = 'radial')
+summary(regressor)
+
+#SVR for dataset obtained after AIC feature selection
+regressor = svm(formula = Yield ~ .,
+                data = AIC_df,
+                type = 'eps-regression',
+                kernel = 'radial')
+summary(regressor)
+
+
+#Visualisation
+
+library(ggplot2)
+ggplot() +
+  geom_point(aes(x =df_wo_NA$BiologicalMaterial06, y = df_wo_NA$Yield),
+             colour = 'red') +
+  geom_line(aes(x =df_wo_NA$BiologicalMaterial06, y = predict(regressor, newdata = df_wo_NA)),
+            colour = 'blue') +
+  ggtitle('Truth or Bluff (SVR)') +
+  xlab('Biological Materials') +
+  ylab('Yield')
+
+
+
+#Decision Tree Regression
+library(rpart)
+regressor = rpart(formula = Yield ~ .,
+                  data = df_wo_NA,
+                  control = rpart.control(minsplit = 1))
+summary(regressor)
+
+
+
+
+#Random Forest Rergression
+library(randomForest)
+set.seed(1234)
+regressor = randomForest(x = df_wo_NA[-1],
+                         y = df_wo_NA$Yield,
+                         ntree = 500)
+
+#Visualisation by using the same code
+library(ggplot2)
+ggplot() +
+  geom_point(aes(x =df_wo_NA$BiologicalMaterial06, y = df_wo_NA$Yield),
+             colour = 'red') +
+  geom_line(aes(x =df_wo_NA$BiologicalMaterial06, y = predict(regressor, newdata = df_wo_NA)),
+            colour = 'blue') +
+  ggtitle('Truth or Bluff (Random Forest Regression)') +
+  xlab('Biological Materials') +
+  ylab('Yield')
+  
